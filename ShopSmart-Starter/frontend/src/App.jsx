@@ -1,3 +1,4 @@
+import React from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { useCart } from './context/CartContext.jsx';
 import ProductsPage from './pages/ProductsPage.jsx';
