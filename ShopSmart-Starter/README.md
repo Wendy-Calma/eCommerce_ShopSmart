@@ -12,7 +12,7 @@ Install these before setting up ShopSmart:
 2. Node.js LTS 22 or newer: https://nodejs.org/
 3. Git: https://git-scm.com/downloads
 4. PostgreSQL 16 or newer: https://www.postgresql.org/download/
-5. Bruno for API testing: https://www.usebruno.com/downloads
+5. Bruno for API testing: https://www.usebruno.com/downloadssq
 6. Google Chrome or Microsoft Edge
 
 During PostgreSQL installation, keep the default port `5432` and record the password assigned to the `postgres` administrator account.
