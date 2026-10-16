@@ -6,12 +6,12 @@ export function calculateItemSubtotal(item) {
   return item.price * item.quantity;
 }
 
-export function calculateCartItemCount(cart) {
-  return cart.reduce((count, item) => count + item.quantity, 0);
-}
-
 export function calculateCartTotal(cart) {
   return cart.reduce((total, item) => total + calculateItemSubtotal(item), 0);
+}
+
+export function calculateCartItemCount(cart) {
+  return cart.reduce((count, item) => count + item.quantity, 0);
 }
 
 export function addProductToCart(cart, product) {

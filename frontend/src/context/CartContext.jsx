@@ -1,9 +1,7 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import {
-  addProductToCart,
-  calculateCartItemCount,
-  calculateCartTotal,
-  updateCartQuantity
+addProductToCart, calculateCartItemCount,
+calculateCartTotal, updateCartQuantity
 } from '../utils/cart.js';
 
 const CartContext = createContext(null);
