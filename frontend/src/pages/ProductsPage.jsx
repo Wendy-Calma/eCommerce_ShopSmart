@@ -16,51 +16,30 @@ export default function ProductsPage() {
   const searchTerm = search.trim();
 
   useEffect(() => {
-    let isCurrentRequest = true;
-
+    let active = true;
     setLoading(true);
     setError('');
-
-    async function loadProducts() {
-      try {
-        const data = await api.getProducts(searchTerm);
-
+    api.getProducts(searchTerm)
+      .then((data) => {
         setCategories((current) => [
           'All',
           ...new Set([...current.slice(1), ...data.products.map((product) => product.category)])
         ]);
-
-        if (!isCurrentRequest) {
-          return;
-        }
-
-        setProducts(data.products);
-      } catch (caught) {
-        if (!isCurrentRequest) {
-          return;
-        }
-
+        if (active) setProducts(data.products);
+      })
+      .catch((caught) => {
+        if (!active) return;
         setProducts([]);
         setError(caught.message);
-      } finally {
-        if (isCurrentRequest) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadProducts();
-
-    return () => {
-      isCurrentRequest = false;
-    };
+      })
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
   }, [searchTerm]);
 
   const visibleProducts = products.filter((product) => {
     const matchesCategory = category === 'All' || product.category === category;
     return matchesCategory;
   });
-
   const sortedProducts = [...visibleProducts];
   if (sortOrder === 'price-ascending') {
     sortedProducts.sort((a, b) => Number(a.price) - Number(b.price));
@@ -83,18 +62,12 @@ export default function ProductsPage() {
       <div className="toolbar">
         <label>
           <span>Search products</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Try keyboard"
-          />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Try keyboard" />
         </label>
         <label>
           <span>Category</span>
           <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            {categories.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
+            {categories.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
         <label>
@@ -109,26 +82,14 @@ export default function ProductsPage() {
       </div>
 
       <StatusMessage>{cartMessage}</StatusMessage>
-      {loading && (
-        <StatusMessage>Loading products…</StatusMessage>
-      )}
-      {error && (
-        <StatusMessage type="error">
-          {error} Make sure the backend is running.
-        </StatusMessage>
-      )}
-      {!loading && !error && visibleProducts.length === 0 && (
-        <StatusMessage>No products match your search and filters.</StatusMessage>
-      )}
+      {loading && <StatusMessage>Loading products…</StatusMessage>}
+      {error && <StatusMessage type="error">{error} Make sure the backend is running.</StatusMessage>}
+      {!loading && !error && visibleProducts.length === 0 && <StatusMessage>No products match your search and filters.</StatusMessage>}
 
       {!loading && !error && (
         <div className="product-grid">
           {sortedProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onAddToCart={addToCart}
-            />
+            <ProductCard key={product.id} product={product} onAddToCart={addToCart} />
           ))}
         </div>
       )}
