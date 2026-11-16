@@ -23,6 +23,7 @@ async function request(path, { timeoutMs, ...options } = {}) {
     const error = new Error(message);
     error.status = response.status;
     error.code = data?.error?.code;
+    error.details = data?.error?.details;
     throw error;
   }
   return data;
@@ -33,8 +34,6 @@ export const api = {
   getProduct: (id) => request(`/products/${id}`),
   createOrder: (order) => request('/orders', { method: 'POST', body: JSON.stringify(order) }),
   askAssistant: (question) => request('/assistant/questions', {
-    // Longer than the server's provider timeout, so the server fallback normally wins,
-    // but the page can never wait forever.
     method: 'POST', body: JSON.stringify({ question }), timeoutMs: 20_000
   })
 };

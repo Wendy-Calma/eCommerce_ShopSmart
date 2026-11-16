@@ -1,8 +1,3 @@
-// Server-side AI provider: Google Gemini API, models.generateContent over HTTPS.
-// The API key is read from server environment only (backend/.env), sent in the
-// x-goog-api-key header (never in the URL, so it cannot appear in request logs),
-// and never included in errors, logs, or API responses.
-
 export class ProviderError extends Error {
   constructor(code, message, { status } = {}) {
     super(message);
@@ -64,28 +59,35 @@ export function createGeminiProvider({ apiKey, model = DEFAULT_MODEL, timeoutMs 
         }
       };
 
-      let response;
-      try {
-        response = await fetchImpl(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(timeoutMs)
-        });
-      } catch (error) {
-        if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
-          throw new ProviderError('PROVIDER_TIMEOUT', `AI provider did not respond within ${timeoutMs} ms.`);
-        }
-        throw new ProviderError('PROVIDER_UNAVAILABLE', 'AI provider could not be reached.');
-      }
-
-      if (!response.ok) throw classifyHttpError(response.status);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new DOMException(`AI provider did not respond within ${timeoutMs} ms.`, 'TimeoutError')), timeoutMs);
 
       let data;
-      try { data = await response.json(); }
-      catch (error) {
-        if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new ProviderError('PROVIDER_TIMEOUT', 'AI provider response timed out.');
-        throw new ProviderError('PROVIDER_BAD_OUTPUT', 'AI provider returned a non-JSON body.');
+      try {
+        let response;
+        try {
+          response = await fetchImpl(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+        } catch (error) {
+          if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+            throw new ProviderError('PROVIDER_TIMEOUT', `AI provider did not respond within ${timeoutMs} ms.`);
+          }
+          throw new ProviderError('PROVIDER_UNAVAILABLE', 'AI provider could not be reached.');
+        }
+
+        if (!response.ok) throw classifyHttpError(response.status);
+
+        try { data = await response.json(); }
+        catch (error) {
+          if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new ProviderError('PROVIDER_TIMEOUT', 'AI provider response timed out.');
+          throw new ProviderError('PROVIDER_BAD_OUTPUT', 'AI provider returned a non-JSON body.');
+        }
+      } finally {
+        clearTimeout(timer);
       }
 
       const candidate = data?.candidates?.[0];

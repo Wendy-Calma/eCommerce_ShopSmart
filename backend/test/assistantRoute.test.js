@@ -1,5 +1,3 @@
-// HTTP-level checks for POST /api/assistant/questions that do not need a database:
-// validation runs before the catalog query.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';

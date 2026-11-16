@@ -1,14 +1,7 @@
-// Grounded product assistant.
-//
-// Flow: retrieveCandidates() decides which catalog records are eligible (ShopSmart code,
-// not the AI). If nothing qualifies we answer honestly without calling the provider.
-// Otherwise the provider may draft the wording; verifyDraft() checks it against the same
-// records. Any provider or verification failure falls back to buildRuleAnswer().
 import { verifyDraft } from './verifyDraft.js';
 
 const MAX_RECOMMENDATIONS = 3;
 
-// Words that describe the request rather than the product being searched for.
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'of', 'to', 'in', 'on', 'at', 'is', 'are', 'it', 'its', 'be', 'me', 'my', 'i', 'im',
   'you', 'your', 'we', 'our', 'do', 'does', 'did', 'have', 'has', 'can', 'could', 'would', 'should', 'will', 'please',
@@ -22,7 +15,6 @@ const STOP_WORDS = new Set([
   'best', 'great', 'nice', 'new', 'like', 'help', 'choose', 'pick', 'option', 'options', 'thing', 'things', 'hi', 'hello'
 ]);
 
-// Small synonym table so common wording still reaches catalog terms.
 const SYNONYMS = {
   headphone: 'headset', earphone: 'headset', earbud: 'headset', mic: 'microphone',
   camera: 'webcam', cam: 'webcam', light: 'lamp', notebook: 'laptop', mice: 'mouse'
@@ -45,7 +37,6 @@ export function tokenize(text) {
 }
 
 export function extractSearchTerms(question) {
-  // Pure numbers (budgets, quantities) are handled by parseBudget, not by text matching.
   return [...new Set(tokenize(question).filter((term) => !STOP_WORDS.has(term) && !/^\d+$/.test(term)))];
 }
 
@@ -55,8 +46,6 @@ function toAmount(digits, thousandSuffix) {
   return thousandSuffix ? value * 1000 : value;
 }
 
-// Only treat a number as a budget when the wording says so ("below 2000", "₱2,000", "1500 pesos").
-// A bare number such as "1080p" is a product detail, not a price limit.
 export function parseBudget(question) {
   const text = String(question);
   const amount = String.raw`(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?`;
@@ -72,8 +61,6 @@ export function parseBudget(question) {
   return null;
 }
 
-// Convert a database record into the plain public facts the assistant may use.
-// Prisma returns Decimal for price, so convert it explicitly instead of relying on coercion.
 export function toCatalogFact(product) {
   const price = typeof product.price === 'object' && product.price !== null && 'toNumber' in product.price
     ? product.price.toNumber()
@@ -97,9 +84,6 @@ function scoreProduct(fact, terms) {
   }, 0);
 }
 
-// Decide which catalog products are eligible for this question.
-// Returns the eligible candidates plus the reasons other relevant products were excluded,
-// so the no-match answer can be honest about why.
 export function retrieveCandidates(products, question) {
   const facts = products.map(toCatalogFact).filter((fact) => fact.active);
   const terms = extractSearchTerms(question);
@@ -107,12 +91,10 @@ export function retrieveCandidates(products, question) {
 
   let relevant;
   if (terms.length === 0) {
-    // A pure budget question ("what can I get under ₱1,000?") considers the whole active catalog.
     relevant = facts.map((fact) => ({ ...fact, score: 0 }));
   } else {
     const scored = facts.map((fact) => ({ ...fact, score: scoreProduct(fact, terms) })).filter((fact) => fact.score > 0);
     const top = Math.max(0, ...scored.map((fact) => fact.score));
-    // Keep strong matches only, so "quiet keyboard" does not pull in a mouse described as quiet.
     relevant = scored.filter((fact) => fact.score >= top / 2);
   }
 
@@ -126,7 +108,6 @@ export function retrieveCandidates(products, question) {
   return { question, terms, budget, candidates, outOfStock, overBudget, catalog: facts };
 }
 
-// Kept for the existing tests and callers: the ranked, eligible products.
 export function rankProducts(products, question) {
   return retrieveCandidates(products, question).candidates;
 }
@@ -165,7 +146,6 @@ function matchAnswer(retrieval) {
   return `Based on the current ShopSmart catalog, these in-stock products match${scope}: ${listNames(described)}.`;
 }
 
-// Recommendations and sources are always built from catalog records, never from model output.
 export function toResponseProducts(facts) {
   return {
     recommendedProducts: facts.map(({ id, name, price, category, stock }) => ({ id, name, price, category, stock })),
@@ -180,7 +160,6 @@ export function buildRuleAnswer(retrieval) {
   return { answer: matchAnswer(retrieval), ...toResponseProducts(retrieval.candidates) };
 }
 
-// Rule-only response (no provider). Same shape the starter returned.
 export function buildAssistantResponse(products, question) {
   return { ...buildRuleAnswer(retrieveCandidates(products, question)), mode: 'rules', notice: null };
 }
@@ -198,31 +177,26 @@ function fallback(retrieval, code) {
   return { ...buildRuleAnswer(retrieval), mode: 'rules', notice: FALLBACK_NOTICES[code] ?? FALLBACK_NOTICES.PROVIDER_UNAVAILABLE, fallbackReason: code };
 }
 
-// Remove obvious personal data before the question leaves the server.
 export function redactQuestion(question) {
   return String(question)
     .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[email removed]')
     .replace(/(?:\+?\d[\s-]?){10,}/g, '[number removed]');
 }
 
-// Only the selected candidates' public fields are sent to the provider: enough to name,
-// describe, price and confirm availability. No other products, orders, or customer data.
 export function toProviderFacts(candidates) {
   return candidates.map(({ id, name, category, description, price, stock }) => ({ id, name, category, description, pricePHP: price, stock }));
 }
 
 /**
- * Answer a customer question with catalog retrieval, an optional AI draft, and verification.
  * @param {object} options
- * @param {Array} options.products active catalog records from the database
- * @param {string} options.question validated customer question
- * @param {{ draft: Function } | null} options.provider AI provider, or null when not configured
- * @param {(event: object) => void} [options.log] receives fallback events (codes only, never secrets)
+ * @param {Array} options.products 
+ * @param {string} options.question 
+ * @param {{ draft: Function } | null} options.provider 
+ * @param {(event: object) => void} [options.log]
  */
 export async function answerQuestion({ products, question, provider, log = () => {} }) {
   const retrieval = retrieveCandidates(products, question);
 
-  // No eligible product: answer honestly and do not spend a provider call.
   if (retrieval.candidates.length === 0) return { ...buildRuleAnswer(retrieval), mode: 'rules', notice: null };
   if (!provider) return fallback(retrieval, 'PROVIDER_NOT_CONFIGURED');
 

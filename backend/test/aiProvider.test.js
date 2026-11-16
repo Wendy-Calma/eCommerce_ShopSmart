@@ -44,6 +44,16 @@ test('a slow provider becomes PROVIDER_TIMEOUT', async () => {
   await assert.rejects(provider.draft(input), { code: 'PROVIDER_TIMEOUT' });
 });
 
+test('a provider that stalls while sending the body becomes PROVIDER_TIMEOUT', async () => {
+  const stallBody = async (_url, { signal }) => ({
+    ok: true,
+    status: 200,
+    json: () => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)))
+  });
+  const provider = createGeminiProvider({ apiKey: KEY, timeoutMs: 20, fetchImpl: stallBody });
+  await assert.rejects(provider.draft(input), { code: 'PROVIDER_TIMEOUT' });
+});
+
 test('a network error becomes PROVIDER_UNAVAILABLE', async () => {
   const provider = createGeminiProvider({ apiKey: KEY, fetchImpl: async () => { throw new TypeError('fetch failed'); } });
   await assert.rejects(provider.draft(input), { code: 'PROVIDER_UNAVAILABLE' });

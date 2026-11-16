@@ -11,7 +11,6 @@ const products = [
   { id: 2, name: 'Mouse', category: 'Accessories', description: 'Wireless mouse', price: 600, stock: 3 }
 ];
 
-// Mirrors the seeded catalog, with a Decimal-like price to check deliberate conversion.
 const decimal = (value) => ({ toNumber: () => value, toString: () => String(value) });
 const catalog = [
   { id: 7, name: 'Wireless Mouse', description: 'Quiet wireless mouse with adjustable sensitivity and USB receiver.', category: 'Accessories', price: decimal(650), stock: 12, active: true },

@@ -1,4 +1,4 @@
-# ShopMart- Calma, Wendy 
+# ShopMart- Calma, Wendy (Others: Justine Esguerra and Harman Magar)
 
 ShopSmart is a working educational e-commerce starter for a six-week BSIT full-stack AI application development sequence. It contains a React front end, Express REST API, PostgreSQL database through Prisma, shopping cart, simulated checkout and rule-based product assistant.
 
@@ -81,11 +81,13 @@ git --version
 13. At the `postgres=#` prompt, run these statements one at a time:
 
 ```sql
-CREATE USER shopsmart_user WITH PASSWORD 'shopsmart_dev';
+CREATE USER shopsmart_user WITH PASSWORD 'shopsmart_dev' CREATEDB;
 CREATE DATABASE shopsmart OWNER shopsmart_user;
 ```
 
 14. Confirm that each statement returns `CREATE ROLE` or `CREATE DATABASE`.
+
+    `CREATEDB` lets `npm run db:migrate` create Prisma's temporary shadow database. Without it, the migration step fails with `permission denied to create database`. If the user already exists, run `ALTER USER shopsmart_user CREATEDB;` instead.
 15. Type `\q` and press Enter to close SQL Shell.
 
 If PostgreSQL reports that the user or database already exists, do not create another one. Ask the instructor before deleting existing data.
@@ -178,6 +180,8 @@ npm run db:migrate
 
 Prisma will connect using `backend/.env` and create the Product, Order and OrderItem tables. The migration command should report that the database is in sync.
 
+If you cannot grant `CREATEDB`, run `npm run db:deploy` instead. It applies the committed migrations without a shadow database and is the command used for staging and production.
+
 ### 7. Insert sample products
 
 Run:
@@ -263,7 +267,7 @@ psql -U postgres
 Then run:
 
 ```sql
-CREATE USER shopsmart_user WITH PASSWORD 'shopsmart_dev';
+CREATE USER shopsmart_user WITH PASSWORD 'shopsmart_dev' CREATEDB;
 CREATE DATABASE shopsmart OWNER shopsmart_user;
 \q
 ```
@@ -319,7 +323,16 @@ Confirm that the front end uses http://localhost:5173 and that `FRONTEND_URL=htt
 | `npm run check` | Lint, test and build |
 | `npm run db:generate` | Generate Prisma Client |
 | `npm run db:migrate` | Create or update database tables |
+| `npm run db:deploy` | Apply committed migrations only (staging and production) |
 | `npm run db:seed` | Reset and insert sample data |
 | `npm run db:studio` | Open the Prisma database viewer |
 
 Read `docs/TEACHING_ROADMAP.md` for the weekly improvement plan.
+
+## Quality and deployment records
+
+The Week 6 quality and deployment challenge records are in `docs/release/`:
+
+- `TEST_RECORD.md`: baseline, customer journey and failure tests, defects and fixes
+- `DEPLOYMENT_PLAN.md`: architecture diagram, configuration and migration plan
+- `RELEASE_NOTE.md`: working features, known limitations and deployment status

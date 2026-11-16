@@ -1,7 +1,3 @@
-// Verifies an AI draft against the catalog records selected for this request.
-// The draft is untrusted text: it is shown only if every product id, price, number and
-// availability statement can be traced to those records. Otherwise the caller falls back
-// to the rule-based answer.
 import { z } from 'zod';
 
 const MAX_ANSWER_LENGTH = 700;
@@ -11,8 +7,6 @@ const draftSchema = z.object({
   recommendedProductIds: z.array(z.number().int().positive()).min(1).max(3)
 });
 
-// Topics the catalog has no data for, so the model cannot have a verified fact about them,
-// plus availability statements that contradict "every candidate is in stock".
 const UNSUPPORTED_CLAIMS = [
   /out\s+of\s+stock/i, /sold\s+out/i, /\bunavailable\b/i, /\bnot\s+available\b/i, /\bback\s*order/i, /\bpre-?order/i,
   /\bdiscount/i, /\b(?:on\s+)?sale\b/i, /\bpromo/i, /\bvoucher/i, /\bfree\s+shipping/i, /\bshipping\b/i,
@@ -32,13 +26,12 @@ function numbersIn(text) {
 
 export function parseDraft(text) {
   if (typeof text !== 'string') return null;
-  // Tolerate a fenced ```json block even though JSON output was requested.
   const unfenced = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try { return JSON.parse(unfenced); } catch { return null; }
 }
 
 /**
- * @param {string} draftText raw provider output
+ * @param {string} draftText 
  * @param {{ candidates: Array, catalog: Array, budget: number|null, question: string }} retrieval
  * @returns {{ ok: true, answer: string, productIds: number[] } | { ok: false, reason: string, detail?: string }}
  */
