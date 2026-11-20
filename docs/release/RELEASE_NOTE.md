@@ -3,7 +3,8 @@
 ## Version and date
 
 - Version: ShopSmart 1.0.0, Week 6 local release candidate
-- Date: 2026-11-13
+- Date: 2026-11-16 (local tests run on 2026-11-13; live Gemini test on 2026-11-16)
+- Code version: `main` branch of `Wendy-Calma/eCommerce_ShopSmart`, Week 6 submission commit `eca02d6`.
 - Deployment status: **local release candidate only.** No private staging or live site was deployed. The AWS deployment (Amplify, EC2 and RDS) is planned in `DEPLOYMENT_PLAN.md` and will be carried out in the separate deployment assignment.
 
 ## Working features (verified 2026-11-13)
@@ -65,7 +66,14 @@ npm run check
 npm run dev
 ```
 
-Then open http://localhost:5173 and http://localhost:3000/api/health. No extra configuration is needed; `GEMINI_API_KEY` may stay empty.
+Then open http://localhost:5173 and http://localhost:3000/api/health.
+
+Optional AI configuration: the assistant works without any key, using rule-based answers. To turn on Gemini drafting, set these in `backend/.env` (never commit this file) and restart `npm run dev`:
+
+```env
+GEMINI_API_KEY=<your own key from Google AI Studio>
+GEMINI_MODEL=gemini-3.5-flash-lite
+```
 
 ## Team record
 

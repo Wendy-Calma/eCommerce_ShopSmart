@@ -30,11 +30,6 @@ export function parseDraft(text) {
   try { return JSON.parse(unfenced); } catch { return null; }
 }
 
-/**
- * @param {string} draftText 
- * @param {{ candidates: Array, catalog: Array, budget: number|null, question: string }} retrieval
- * @returns {{ ok: true, answer: string, productIds: number[] } | { ok: false, reason: string, detail?: string }}
- */
 export function verifyDraft(draftText, retrieval) {
   const parsed = draftSchema.safeParse(parseDraft(draftText));
   if (!parsed.success) return { ok: false, reason: 'MALFORMED_OUTPUT' };
@@ -43,17 +38,14 @@ export function verifyDraft(draftText, retrieval) {
   const productIds = [...new Set(parsed.data.recommendedProductIds)];
   const byId = new Map(retrieval.candidates.map((fact) => [fact.id, fact]));
 
-  // 1. Every id must be one ShopSmart selected for this request.
   const unknown = productIds.filter((id) => !byId.has(id));
   if (unknown.length > 0) return { ok: false, reason: 'UNKNOWN_PRODUCT_ID', detail: unknown.join(',') };
   const selected = productIds.map((id) => byId.get(id));
 
-  // 2. The answer must not name catalog products that were not recommended.
   const lowerAnswer = answer.toLowerCase();
   const unlisted = retrieval.catalog.filter((fact) => !productIds.includes(fact.id) && lowerAnswer.includes(fact.name.toLowerCase()));
   if (unlisted.length > 0) return { ok: false, reason: 'UNLISTED_PRODUCT', detail: unlisted.map((fact) => fact.id).join(',') };
 
-  // 3. Every peso amount must be a recommended product's current price or the customer's own budget.
   const allowedPrices = new Set(selected.map((fact) => fact.price));
   if (retrieval.budget !== null) allowedPrices.add(retrieval.budget);
   for (const match of answer.matchAll(CURRENCY_PATTERN)) {
@@ -61,8 +53,6 @@ export function verifyDraft(draftText, retrieval) {
     if (!allowedPrices.has(value)) return { ok: false, reason: 'UNSUPPORTED_PRICE', detail: String(value) };
   }
 
-  // 4. Any other number must come from the selected records or the question itself
-  //    (e.g. "1080p" from a name, "16 inches" from a description, a stock count).
   const allowedNumbers = new Set([
     ...allowedPrices,
     ...selected.map((fact) => fact.stock),
@@ -72,7 +62,6 @@ export function verifyDraft(draftText, retrieval) {
   const unsupportedNumber = numbersIn(answer).find((value) => !allowedNumbers.has(value));
   if (unsupportedNumber !== undefined) return { ok: false, reason: 'UNSUPPORTED_NUMBER', detail: String(unsupportedNumber) };
 
-  // 5. No availability or commercial claims the catalog cannot support.
   const claim = UNSUPPORTED_CLAIMS.find((pattern) => pattern.test(answer));
   if (claim) return { ok: false, reason: 'UNSUPPORTED_CLAIM', detail: claim.source };
 

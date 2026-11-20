@@ -36,7 +36,7 @@ test('an oversized body returns HTTP 413 PAYLOAD_TOO_LARGE', async () => {
 });
 
 test('an unknown API route returns HTTP 404 ROUTE_NOT_FOUND', async () => {
-  const { status, body } = await send('/api/orders/123');
+  const { status, body } = await send('/api/does-not-exist');
   assert.equal(status, 404);
   assert.equal(body.error.code, 'ROUTE_NOT_FOUND');
 });

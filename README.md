@@ -178,7 +178,7 @@ Make sure the PostgreSQL service is running. Then run:
 npm run db:migrate
 ```
 
-Prisma will connect using `backend/.env` and create the Product, Order and OrderItem tables. The migration command should report that the database is in sync.
+Prisma will connect using `backend/.env` and create the Product, Order, OrderItem, User and Session tables. If your database was created before customer accounts were added, the same command applies only the new migration and keeps your existing products and orders. The migration command should report that the database is in sync.
 
 If you cannot grant `CREATEDB`, run `npm run db:deploy` instead. It applies the committed migrations without a shadow database and is the command used for staging and production.
 
@@ -231,8 +231,10 @@ Keep this terminal open. It runs both applications:
 {"status":"ok"}
 ```
 
-4. Visit http://localhost:3000/api/products.
-5. Confirm that the response contains six products.
+4. Visit http://localhost:3000/api/health/ready.
+5. Confirm that it displays `{"status":"ok","database":"ok"}`. This check also proves the API can reach PostgreSQL.
+6. Visit http://localhost:3000/api/products.
+7. Confirm that the response contains six products.
 
 ### 11. Verify the front end
 
@@ -243,12 +245,15 @@ Keep this terminal open. It runs both applications:
 5. Add a product to the cart.
 6. Open the cart and change the quantity.
 7. Select **Proceed to checkout**.
-8. Enter a name, valid email address and address of at least ten characters.
-9. Select **Place simulated order**.
-10. Confirm that an order number appears.
-11. Open **AI Assistant**.
-12. Ask `Which keyboard is below ₱2,000?`.
-13. Confirm that the response recommends a matching product.
+8. Confirm that the page asks you to sign in, then select **Sign in to continue**.
+9. Select **Create a new account** and enter a fictional name, a fictional email address such as `ana.test@example.com`, and a password of at least eight characters that you do not use anywhere else.
+10. Confirm that you return to checkout with your cart and that your name and email are filled in.
+11. Enter an address of at least ten characters and select **Place simulated order**.
+12. Confirm that an order number appears, then select **View my orders** and confirm that the order is listed.
+13. Select **Sign out** and confirm that **My orders** asks you to sign in again.
+14. Open **AI Assistant**.
+15. Ask `Which keyboard is below ₱2,000?`.
+16. Confirm that the response recommends a matching product.
 
 ### 12. Stop the application
 
@@ -324,7 +329,7 @@ Confirm that the front end uses http://localhost:5173 and that `FRONTEND_URL=htt
 | `npm run db:generate` | Generate Prisma Client |
 | `npm run db:migrate` | Create or update database tables |
 | `npm run db:deploy` | Apply committed migrations only (staging and production) |
-| `npm run db:seed` | Reset and insert sample data |
+| `npm run db:seed` | Delete all orders and products, then insert sample products (customer accounts are kept) |
 | `npm run db:studio` | Open the Prisma database viewer |
 
 Read `docs/TEACHING_ROADMAP.md` for the weekly improvement plan.

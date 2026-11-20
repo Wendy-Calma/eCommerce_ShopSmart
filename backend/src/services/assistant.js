@@ -187,13 +187,6 @@ export function toProviderFacts(candidates) {
   return candidates.map(({ id, name, category, description, price, stock }) => ({ id, name, category, description, pricePHP: price, stock }));
 }
 
-/**
- * @param {object} options
- * @param {Array} options.products 
- * @param {string} options.question 
- * @param {{ draft: Function } | null} options.provider 
- * @param {(event: object) => void} [options.log]
- */
 export async function answerQuestion({ products, question, provider, log = () => {} }) {
   const retrieval = retrieveCandidates(products, question);
 

@@ -148,16 +148,24 @@ Starting state for all cases unless stated: database freshly seeded (six product
 
 ### TC-12 API order validation and unavailable products
 
-| Request | Expected | Observed |
-| --- | --- | --- |
-| Name `A`, email `bad`, address `short`, `items: []` | 422 with field errors | 422 `INVALID_ORDER`, errors for `customerName`, `email`, `address`, `items` |
-| `quantity: 7` for webcam (stock 6) | 409 | 409 `INSUFFICIENT_STOCK` `Only 6 unit(s) of 1080p Webcam are available.` |
-| `productId: 999` | 422 | 422 `PRODUCT_UNAVAILABLE` |
-| `quantity: 1.5` | 422 | 422 `INVALID_ORDER` `expected int` |
-| `GET /api/products/999` | 404 | 404 `PRODUCT_NOT_FOUND` |
-| `GET /api/products/abc` | 400 | 400 `INVALID_PRODUCT_ID` |
-| `GET /api/nope` | 404 | 404 `ROUTE_NOT_FOUND` |
-| Body `{bad` to `POST /api/orders` | 400 with a clear code and a trace id | **Fail.** 400 `INTERNAL_ERROR` with raw parser text `Expected property name or '}' in JSON at position 1` and no `traceId`. Defect D4. Retest after fix: 400 `INVALID_JSON`, `Request body must be valid JSON.`, `traceId` present |
+| Field | Record |
+| --- | --- |
+| Case and starting state | API running at `http://localhost:3000`, seeded catalog (1080p Webcam stock 6). Requests sent with `curl`, header `Content-Type: application/json` |
+| Action and test data | The eight requests in the table below. `<customer>` means `"customerName":"Juan Dela Cruz","email":"juan@example.com","address":"123 Sample St, Fictional City"` |
+| Expected result | Each invalid request is refused with the status and error code shown, and no order is created |
+| Observed result and evidence | See the table. Seven matched; the malformed JSON request did not (defect D4) |
+| Decision | Fail before the D4 fix; **Pass** on retest after the fix |
+
+| # | Request | Expected | Observed | Decision |
+| --- | --- | --- | --- | --- |
+| 1 | `POST /api/orders` body `{"customerName":"A","email":"bad","address":"short","items":[]}` | 422 with field errors | 422 `INVALID_ORDER`, errors for `customerName`, `email`, `address`, `items` | Pass |
+| 2 | `POST /api/orders` body `{<customer>,"items":[{"productId":4,"quantity":7}]}` | 409 | 409 `INSUFFICIENT_STOCK` `Only 6 unit(s) of 1080p Webcam are available.` | Pass |
+| 3 | `POST /api/orders` body `{<customer>,"items":[{"productId":999,"quantity":1}]}` | 422 | 422 `PRODUCT_UNAVAILABLE` | Pass |
+| 4 | `POST /api/orders` body `{<customer>,"items":[{"productId":1,"quantity":1.5}]}` | 422 | 422 `INVALID_ORDER` `expected int` | Pass |
+| 5 | `GET /api/products/999` | 404 | 404 `PRODUCT_NOT_FOUND` | Pass |
+| 6 | `GET /api/products/abc` | 400 | 400 `INVALID_PRODUCT_ID` | Pass |
+| 7 | `GET /api/nope` | 404 | 404 `ROUTE_NOT_FOUND` | Pass |
+| 8 | `POST /api/orders` with the raw body `{bad` | 400 with a clear code and a trace id | 400 `INTERNAL_ERROR` with raw parser text `Expected property name or '}' in JSON at position 1` and no `traceId` | **Fail**, defect D4. Retest after fix: 400 `INVALID_JSON`, `Request body must be valid JSON.`, `traceId` present. **Pass** |
 
 ### TC-13 Assistant: supported question
 
@@ -306,7 +314,7 @@ During testing, a second API instance was stopped with `pkill -f "node src/serve
 | --- | --- | --- | --- |
 | L1 | Cart is in memory only and empties on refresh | Customer re-adds items after a reload; totals stay correct | Documented; roadmap Week 2 persistence task |
 | L2 | Cart keeps the stock value from when the item was added | Checkout can show a 409 message if stock dropped (TC-11) | Server re-checks stock in a transaction, so overselling cannot happen |
-| L3 | No authentication or roles | Anyone with the URL can place a simulated order; no order history | No order read route exists; staging must be private and use fictional data only |
+| L3 | No authentication or roles | Anyone with the URL can place a simulated order; no order history | No order read route exists; staging must be private and use fictional data only  **Resolved 2026-11-19**: sign-in and order ownership added (section 6, TC-20 and TC-21) |
 | L4 | Live Gemini verified with one model (`gemini-3.5-flash-lite`) on 2026-11-16 only | Wording may differ with another model or a later model version; the draft checker was not triggered live | Every draft is checked against the catalog before it is shown, and rule-based answers are returned on any provider failure or rejected draft (TC-16, unit tests) |
 | L5 | `npm run db:seed` deletes all orders and products | Re-seeding destroys work | Never seed staging after first use; use `db:deploy` for migrations |
 | L6 | Product search sends a request on every keystroke | Extra API traffic | Acceptable for the classroom catalog size |
@@ -323,3 +331,83 @@ During testing, a second API instance was stopped with `pkill -f "node src/serve
 | Privacy | Only fictional names, `example.com` emails and placeholder addresses were used |
 
 Local smoke test (`logs/03-local-smoke-test.log`, 2026-11-13T14:02Z, fresh `npm run dev`): health ok → 6 products → 2 × USB Headset total ₱2,700 → invalid email refused with field named → order #5 total ₱2,700.00 → assistant keyboard answer from catalog data. Result: **Pass**.
+
+## 6. Deployment readiness tests (2026-11-19)
+
+These tests cover the changes made for the AWS deployment assignment: customer accounts, order ownership, a database readiness check, `TRUST_PROXY` and `HOST`. Starting state: local database from earlier tests (6 products, 5 orders without an owner), migration `20261119112252_add_users_and_sessions` applied. All names and emails are fictional, and passwords were used only for these tests.
+
+### TC-20 Order ownership by direct API request
+
+| Field | Record |
+| --- | --- |
+| Case and starting state | API on port 3010. Two fictional customers: Ana Reyes (`ana.test@example.com`) and Ben Cruz (`ben.test@example.com`) |
+| Action and test data | `curl` requests below; `<A>` and `<B>` are the tokens returned by `POST /api/auth/register` |
+| Expected result | Guests get 401; the owner reads their own order; another customer gets 404 and cannot list it; wrong passwords and forged or signed-out tokens are refused |
+| Observed result and evidence | All matched (table below). In the database both passwords start with `scrypt$` and session tokens are stored as 64-character SHA-256 hashes. Searching the server log for the tokens and passwords found 0 matches |
+| Decision | Pass |
+
+| # | Request | Expected | Observed |
+| --- | --- | --- | --- |
+| 1 | `POST /api/auth/register` Ana, password `fictional-pass-1` | 201 with token | 201, user id 1, 43-character token |
+| 2 | Register `ANA.TEST@example.com` again | 409 | 409 `EMAIL_TAKEN` (email compared in lowercase) |
+| 3 | `POST /api/auth/login` Ana with a wrong password | 401 | 401 `INVALID_CREDENTIALS` |
+| 4 | Login with an unknown email | 401, same message as #3 | 401 `INVALID_CREDENTIALS` |
+| 5 | Login `Ana.Test@example.com` with the right password | 200 | 200, user id 1 |
+| 6 | `POST /api/orders` with no token | 401 | 401 `AUTH_REQUIRED` |
+| 7 | `POST /api/orders` with `<A>`, 1 × Wireless Mouse | 201 owned by Ana | 201, order #6, `userId: 1`, total 650 |
+| 8 | `GET /api/orders/6` with no token | 401 | 401 `AUTH_REQUIRED` |
+| 9 | `GET /api/orders/6` with `<A>` (owner) | 200 | 200, order #6 with `productName: "Wireless Mouse"` |
+| 10 | `GET /api/orders/6` with `<B>` (another customer) | Denied | 404 `ORDER_NOT_FOUND` |
+| 11 | `GET /api/orders/1` with `<B>` (old order with no owner) | Denied | 404 `ORDER_NOT_FOUND` |
+| 12 | `GET /api/orders` with `<A>` / `<B>` | Only own orders | Ana: `#6` only; Ben: `{"orders":[]}` |
+| 13 | `GET /api/orders` with a made-up 43-character token | 401 | 401 `SESSION_EXPIRED` |
+| 14 | `POST /api/auth/logout` with `<A>`, then `GET /api/auth/me` with `<A>` | 204, then 401 | 204, then 401 `SESSION_EXPIRED` |
+
+### TC-21 Signed-in customer journey in the browser
+
+| Field | Record |
+| --- | --- |
+| Case and starting state | `npm run dev`, fresh browser, cart empty, signed out |
+| Action and test data | Add Laptop Stand, open checkout, create an account for Carla Mendoza (`carla.test@example.com`), place the order with address `88 Example Avenue, Sample City`, open My orders, refresh, sign out, sign in with a wrong and then the right password, then put a made-up token in `sessionStorage` and refresh |
+| Expected result | Checkout asks a guest to sign in; the cart and the way back to checkout are kept; name and email are filled in; the order appears in My orders and survives a refresh; signing out hides orders and clears the token; a wrong password is refused; a forged token signs the user out |
+| Observed result and evidence | Guest checkout showed `Sign in to place your order` (`screenshots/20-checkout-guest-must-sign-in.png`). A 5-character password was blocked by the browser. After creating the account (`screenshots/21-create-account.png`), the page returned to checkout with `Laptop Stand × 1 ₱1,200` and the name and email filled in. Order #7, total ₱1,200.00 (`screenshots/22-order-placed-signed-in.png`). My orders listed only `Order #7` and still did after a refresh (`screenshots/23-my-orders.png`). After sign-out: `Sign in to see your orders`, stored token `null` (`screenshots/24-orders-after-sign-out.png`). Wrong password: `The email or password is incorrect.` (`screenshots/25-sign-in-wrong-password.png`). Signing in again returned to `/orders`. Forged token on reload: signed out, token cleared. 0 console errors other than the expected 401 |
+| Decision | Pass |
+
+### TC-22 Readiness check with the database up and down
+
+| Field | Record |
+| --- | --- |
+| Case and starting state | One API with the normal `DATABASE_URL`; one API (port 3011) with `DATABASE_URL` pointing at port 5999, where nothing listens |
+| Action and test data | `GET /api/health` and `GET /api/health/ready` on each |
+| Expected result | `/api/health` answers either way; `/api/health/ready` reports the database |
+| Observed result and evidence | Database up: `/api/health/ready` → 200 `{"status":"ok","database":"ok"}`. Database down: `/api/health` → 200 `{"status":"ok"}`, but `/api/health/ready` → **503** `{"status":"error","database":"unreachable"}` |
+| Decision | Pass. This shows why `/api/health` alone cannot prove the deployment works |
+
+### TC-23 `TRUST_PROXY` and `HOST`
+
+| Field | Record |
+| --- | --- |
+| Case and starting state | API on port 3012 with `TRUST_PROXY=1 HOST=127.0.0.1`; API on port 3013 with neither |
+| Action and test data | 20 assistant requests with `X-Forwarded-For: 203.0.113.1`, then one more from that visitor and the first one from `203.0.113.2`. Then `GET /api/health` on port 3012 through `127.0.0.1` and through the container's network address |
+| Expected result | Without `TRUST_PROXY`, everyone behind the proxy shares one limit; with it, each visitor has their own. With `HOST=127.0.0.1`, the API is not reachable from the network address |
+| Observed result and evidence | No `TRUST_PROXY`: visitor 1's 21st request → 429, and visitor 2's **first** request → **429** (shared limit). With `TRUST_PROXY=1`: visitor 1's 21st → 429, visitor 2's first → **422** (passed the limiter; `"zz"` is too short). `HOST=127.0.0.1`: `127.0.0.1` → 200; network address → no connection |
+| Decision | Pass |
+
+### TC-24 Migration keeps existing data
+
+| Field | Record |
+| --- | --- |
+| Case and starting state | Local database with 6 products and 5 orders, only the initial migration applied |
+| Action and test data | Apply `20261119112252_add_users_and_sessions`, then run `npm run db:deploy` |
+| Expected result | New tables added; no product or order lost |
+| Observed result and evidence | The migration SQL only runs `ALTER TABLE "Order" ADD COLUMN "userId"`, `CREATE TABLE "User"`, `CREATE TABLE "Session"`, and indexes and foreign keys. Afterwards: 6 products, 5 orders (0 with an owner). `npm run db:deploy`: `2 migrations found`, `No pending migrations to apply.` |
+| Decision | Pass |
+
+### Checks after these changes
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | Exit 0. Frontend 17/17 tests (new: `api.test.js`, `authStorage.test.js`), backend 60/60 tests (new: `auth.test.js`), lint clean, build OK |
+| Changed existing test | `backend/test/app.test.js` used `GET /api/orders/123` as an example of an unknown route. That route now exists and requires sign-in, so the test uses `/api/does-not-exist` instead; the expected result (404 `ROUTE_NOT_FOUND`) did not change |
+| Secrets | No token, password or key in the repository, logs or screenshots |
+

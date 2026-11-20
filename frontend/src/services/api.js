@@ -1,11 +1,23 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const SESSION_CODES = new Set(['AUTH_REQUIRED', 'SESSION_EXPIRED']);
+
+let authToken = null;
+let onSessionEnded = () => {};
+
+export function setAuthToken(token) {
+  authToken = token || null;
+}
+
+export function setSessionEndedHandler(handler) {
+  onSessionEnded = typeof handler === 'function' ? handler : () => {};
+}
 
 async function request(path, { timeoutMs, ...options } = {}) {
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}), ...options.headers },
       signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
     });
   } catch (caught) {
@@ -24,6 +36,7 @@ async function request(path, { timeoutMs, ...options } = {}) {
     error.status = response.status;
     error.code = data?.error?.code;
     error.details = data?.error?.details;
+    if (response.status === 401 && authToken && SESSION_CODES.has(error.code)) onSessionEnded();
     throw error;
   }
   return data;
@@ -33,6 +46,12 @@ export const api = {
   getProducts: (query = '') => request(`/products${query ? `?search=${encodeURIComponent(query)}` : ''}`),
   getProduct: (id) => request(`/products/${id}`),
   createOrder: (order) => request('/orders', { method: 'POST', body: JSON.stringify(order) }),
+  getOrders: () => request('/orders'),
+  getOrder: (id) => request(`/orders/${id}`),
+  register: (account) => request('/auth/register', { method: 'POST', body: JSON.stringify(account) }),
+  login: (credentials) => request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+  getCurrentUser: () => request('/auth/me'),
   askAssistant: (question) => request('/assistant/questions', {
     method: 'POST', body: JSON.stringify({ question }), timeoutMs: 20_000
   })

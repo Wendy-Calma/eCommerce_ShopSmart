@@ -104,8 +104,6 @@ export function createGeminiProvider({ apiKey, model = DEFAULT_MODEL, timeoutMs 
   };
 }
 
-// Build the provider from server environment. Returns null when AI drafting is disabled
-// or no key is configured; the assistant then uses its rule-based answer.
 export function createProviderFromEnv(env = process.env) {
   const provider = (env.AI_PROVIDER ?? 'gemini').trim().toLowerCase();
   const apiKey = env.GEMINI_API_KEY?.trim();

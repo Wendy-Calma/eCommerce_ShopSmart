@@ -1,10 +1,21 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { requireAuth } from '../middleware/requireAuth.js';
 import { orderSchema } from '../validators/schemas.js';
 const router = Router();
 
-router.post('/', async (request, response, next) => {
+const ORDER_ITEMS_WITH_PRODUCT = { items: { include: { product: { select: { name: true } } } } };
+
+function toOrderResponse(order) {
+  return {
+    ...order,
+    total: Number(order.total),
+    items: order.items.map(({ product, ...item }) => ({ ...item, unitPrice: Number(item.unitPrice), ...(product ? { productName: product.name } : {}) }))
+  };
+}
+
+router.post('/', requireAuth, async (request, response, next) => {
   try {
     const parsed = orderSchema.safeParse(request.body);
     if (!parsed.success) return response.status(422).json({ error: { code: 'INVALID_ORDER', message: 'Check the customer and cart information.', details: parsed.error.flatten() } });
@@ -29,15 +40,35 @@ router.post('/', async (request, response, next) => {
       }
       return transaction.order.create({
         data: {
-          customerName: parsed.data.customerName, email: parsed.data.email, address: parsed.data.address, total,
+          userId: request.user.id, customerName: parsed.data.customerName, email: parsed.data.email, address: parsed.data.address, total,
           items: { create: normalizedItems.map((item) => ({ productId: item.productId, quantity: item.quantity, unitPrice: item.product.price })) }
         },
-        include: { items: true }
+        include: ORDER_ITEMS_WITH_PRODUCT
       });
     });
-    response.status(201).json({ ...order, total: Number(order.total), items: order.items.map((item) => ({ ...item, unitPrice: Number(item.unitPrice) })) });
+    response.status(201).json(toOrderResponse(order));
   } catch (error) { next(error); }
 });
 
-// WEEK 4 IMPROVEMENT: Associate orders with authenticated users and add a protected GET route.
+router.get('/', requireAuth, async (request, response, next) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { userId: request.user.id },
+      include: ORDER_ITEMS_WITH_PRODUCT,
+      orderBy: { createdAt: 'desc' }
+    });
+    response.json({ orders: orders.map(toOrderResponse) });
+  } catch (error) { next(error); }
+});
+
+router.get('/:id', requireAuth, async (request, response, next) => {
+  try {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id) || id < 1) return response.status(400).json({ error: { code: 'INVALID_ORDER_ID', message: 'Order ID must be a positive integer.' } });
+    const order = await prisma.order.findFirst({ where: { id, userId: request.user.id }, include: ORDER_ITEMS_WITH_PRODUCT });
+    if (!order) return response.status(404).json({ error: { code: 'ORDER_NOT_FOUND', message: 'Order could not be found.' } });
+    response.json(toOrderResponse(order));
+  } catch (error) { next(error); }
+});
+
 export default router;

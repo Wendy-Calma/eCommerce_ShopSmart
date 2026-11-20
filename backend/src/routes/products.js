@@ -31,5 +31,4 @@ router.get('/:id', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-// WEEK 4 IMPROVEMENT: Add authentication, administrator authorization and a validated POST route.
 export default router;
