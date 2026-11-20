@@ -10,7 +10,7 @@ flowchart LR
     subgraph AMP["AWS Amplify Hosting"]
         F["Vite build (frontend/dist)<br/>HTTPS: https://main.APPID.amplifyapp.com<br/>VITE_API_URL baked in at build time"]
     end
-    subgraph VPC["VPC, Region us-east-1 (N. Virginia)"]
+    subgraph VPC["VPC, Region ap-southeast-2 (Sydney)"]
         subgraph EC2SG["EC2 instance, security group sg-api"]
             N["Nginx :443 (public)<br/>TLS certificate, proxies /api"]
             E["Express API 127.0.0.1:3000 (internal only)<br/>systemd service shopsmart-api<br/>NODE_ENV, PORT, HOST, TRUST_PROXY, FRONTEND_URL<br/>DATABASE_URL (secret)<br/>GEMINI_API_KEY (secret, optional)"]
@@ -44,7 +44,7 @@ The browser never talks to PostgreSQL or Gemini directly. Everything goes throug
 | --- | --- | --- | --- |
 | Layout | Amplify + EC2 + RDS | Each service has one job, the same frontend / API / database split I tested locally. With RDS my orders are safe even if I have to replace the EC2 instance, and backups are handled for me | More connections to set up, and three services using credits instead of one |
 | Backup layout | One EC2 host (Nginx serves `frontend/dist` and proxies `/api`; PostgreSQL on the same instance) | Fewer services and one origin, so no CORS setup and only one certificate | One point of failure; I would have to back up the database myself, and deleting the volume deletes the data |
-| Region | `us-east-1` (N. Virginia) | It is usually the cheapest Region for EC2 and RDS, so my credits last longer | It is far from me in the Philippines, so each request takes roughly 200 to 300 ms longer. That is fine for a short classroom demo. I will create everything in this one Region so I do not miss anything during cleanup |
+| Region | `ap-southeast-2` (Sydney) | My account is on the AWS Free plan, and its project is assigned to Sydney. Other Regions need a paid plan, which would remove the Free plan's protection that stops service instead of charging my card when credits run out. Sydney is also much closer to the Philippines than N. Virginia, my first choice, so pages respond faster | Sydney costs a little more per hour than N. Virginia, which my credits still cover for a short demo. I will create everything in this one Region so I do not miss anything during cleanup |
 | API HTTPS | Nginx with a certificate in front of Express | Amplify serves the site over HTTPS, and browsers block calls from an HTTPS page to an `http://` API (mixed content) | I need a hostname for the certificate (section 4) |
 | AI provider | Gemini (`gemini-3.5-flash-lite`) if I have an approved key, which I tested live on 2026-11-16; otherwise rule mode | A paid provider is not required. Every AI answer is checked against the catalog, and the page labels each answer `AI-drafted, verified against the catalog` or `Answered from catalog data` | Without a key, the demo will not show AI-written wording |
 | Sign-in | My own email and password accounts. Passwords are hashed with scrypt; each sign-in creates a random session token that the API stores only as a SHA-256 hash and that expires after 24 hours. The browser keeps the token in `sessionStorage` and sends it as `Authorization: Bearer <token>` | My frontend (`amplifyapp.com`) and API are different sites. Browsers such as Safari and Firefox block cross-site cookies by default, so a cookie session could fail; a header works in every browser and cannot be sent by another site (no CSRF) | If a script ever ran inside my page (XSS), it could read the token. React escapes everything it displays, I have no third-party scripts, and tokens expire after 24 hours or at sign-out |
@@ -188,7 +188,7 @@ I tested this locally. On 2026-11-13, `npm run db:deploy` on a database with ord
 
 ## 8. Accounts and access
 
-- **AWS access (IAM):** the root user is protected with MFA, and I never share its sign-in. I work through my own IAM identity with only the permissions I need (Amplify, EC2 and RDS in my Region). IAM only controls who can manage AWS resources. It does not protect customer orders.
+- **AWS access:** I sign in with my AWS Builder ID, protected with an authenticator app (MFA) and a recovery email, and I never share the sign-in. On the Free plan, AWS gives other people access through the team page, not IAM users; IAM users are only for programmatic access, and I do not need any. AWS sign-in only controls who can manage AWS resources. It does not protect customer orders.
 - **ShopSmart sign-in:** customers create an account and sign in (`/api/auth/register`, `/api/auth/login`). Checkout requires sign-in, and every new order is saved with its owner. `GET /api/orders` and `GET /api/orders/:id` only return the signed-in customer's orders. A guest gets 401, and another customer gets 404 `ORDER_NOT_FOUND`, the same answer as an order that does not exist, so the API does not reveal which order numbers belong to other people. I tested all three cases by direct API request on 2026-11-19 (Test Record TC-20).
 - **Who can open the demo:** only me and my instructor. I will share the URLs only through the class submission, and I will use only fictional customer data and simulated checkout.
 
@@ -215,13 +215,13 @@ Each of these uses credits (or is billed on a Paid plan) for as long as it exist
 
 | Service | Resource | Region | Owner | Purpose | Created | Planned removal |
 | --- | --- | --- | --- | --- | --- | --- |
-| Amplify Hosting | ShopSmart app | us-east-1 | | Frontend | | |
-| EC2 | Instance + EBS volume | us-east-1 | | Express API | | |
-| EC2 | Elastic IP (public IPv4 is charged per hour) | us-east-1 | | Stable API address | | |
-| RDS | PostgreSQL instance + storage | us-east-1 | | Database | | |
-| RDS | Manual snapshots | us-east-1 | | Pre-migration backups | | |
+| Amplify Hosting | ShopSmart app | ap-southeast-2 | | Frontend | | |
+| EC2 | Instance + EBS volume | ap-southeast-2 | | Express API | | |
+| EC2 | Elastic IP (public IPv4 is charged per hour) | ap-southeast-2 | | Stable API address | | |
+| RDS | PostgreSQL instance + storage | ap-southeast-2 | | Database | | |
+| RDS | Manual snapshots | ap-southeast-2 | | Pre-migration backups | | |
 
-Before creating anything, I will take a redacted screenshot of my account plan (Free or Paid), credit balance and expiry date.
+Before creating anything, I recorded my account plan, credit balance and expiry date, set up MFA and created a zero-spend budget. The redacted screenshots are in `DEPLOYMENT_RECORD.md` section 1.
 
 **When the demo ends I will remove everything:** delete the Amplify app; terminate the EC2 instance and make sure its EBS volume is deleted; release the Elastic IP; delete the RDS instance (deciding first whether to keep a final snapshot) and any leftover manual snapshots; delete `sg-api` and `sg-db`; then check Billing and every Region for anything I missed.
 
